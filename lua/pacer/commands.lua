@@ -14,12 +14,17 @@ local last_position = {
 }
 
 function M.start_pacer(args)
-	local speed = nil
+	local config = require("pacer.config")
+	local options = {}
+
 	if args.args and args.args ~= "" then
-		speed = tonumber(args.args)
-		if not speed then
-			n("Pacer: speed must be a number", l.levels.ERROR)
-			return
+		local speed = tonumber(args.args)
+
+		if speed then
+			options.speed = speed
+		else
+			local preset_config = config.get_preset_config(args.args)
+			options = preset_config
 		end
 	end
 
@@ -32,9 +37,7 @@ function M.start_pacer(args)
 		col = cursor[2],
 	}
 
-	pacer.restart({
-		speed = speed,
-	})
+	pacer.restart(options)
 end
 
 function M.stop_pacer()

@@ -96,13 +96,33 @@ local function get_words(bufnr)
 	return words
 end
 
--- Update restart function to set keymap and accept configuration
 function state.restart(options)
 	options = options or {}
 
-	local default_speed = options.speed or 250
+	local config = require("pacer.config")
+	local default_speed = config.options.speed or 250
+
+	-- Handle both direct speed and preset configuration
 	local speed = options.speed or default_speed
 
+	-- Apply other options from preset or defaults
+	if options.highlight then
+		-- Apply highlight settings from preset
+		local highlight = require("pacer.highlight")
+		config.options.highlight = vim.tbl_deep_extend("force", config.options.highlight, options.highlight)
+		highlight.refresh_highlight()
+	end
+
+	-- Apply configuration options
+	if options.move_cursor ~= nil then
+		state.config.move_cursor = options.move_cursor
+	end
+
+	if options.stop_key then
+		state.config.stop_key = options.stop_key
+	end
+
+	-- Rest of your existing restart function
 	state.bufnr = vim.api.nvim_get_current_buf()
 	state.ns = H.create_namespace()
 	state.words = get_words(state.bufnr)
