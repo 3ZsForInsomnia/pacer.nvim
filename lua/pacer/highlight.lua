@@ -3,14 +3,16 @@ local a = v.api
 local c = v.cmd
 
 local M = {}
-local config = require("pacer.config")
+local state = require("pacer.state")
 
 M.ns_id = nil
 local HL_GROUP = "PacerHighlight"
 
 -- Helper function to set up the highlight with config values
-local function setup_highlight()
-	local hl_config = config.options.highlight
+local function setup_highlight(config)
+	config = config or state.config
+
+	local hl_config = config.highlight
 	local cmd = string.format(
 		"highlight %s guibg=%s guifg=%s gui=%s",
 		HL_GROUP,
@@ -42,19 +44,12 @@ function M.highlight_word(bufnr, ns, lnum, col, len)
 	})
 end
 
--- Apply highlight when the module loads if config is already available
-if config.options and config.options.highlight then
-	setup_highlight()
-else
-	-- Fallback if config not loaded yet
-	if v.fn.hlexists(HL_GROUP) == 0 then
-		c(("highlight %s guibg=#335577 guifg=#ffffff gui=bold"):format(HL_GROUP))
-	end
-end
+-- Apply highlight when the module loads
+setup_highlight()
 
 -- Function to refresh highlight when config changes
-function M.refresh_highlight()
-	setup_highlight()
+function M.refresh_highlight(config)
+	setup_highlight(config)
 end
 
 return M

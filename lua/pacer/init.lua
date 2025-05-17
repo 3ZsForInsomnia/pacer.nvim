@@ -6,6 +6,7 @@ function M.setup(opts)
 
 	require("pacer.highlight").refresh_highlight()
 	require("pacer.commands").setup()
+	require("pacer.focus").setup()
 end
 
 return M

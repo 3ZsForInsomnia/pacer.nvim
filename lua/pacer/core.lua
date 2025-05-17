@@ -1,54 +1,69 @@
 local Timer = require("pacer.timer")
 local H = require("pacer.highlight")
-
-local state = {
-	timer = nil,
-	cur_word = nil,
-	words = nil,
-	bufnr = nil,
-	ns = nil,
-	paused = false,
-	last_word_idx = nil,
-	keymap_active = false, -- Track if our keymaps are active
-	config = {
-		move_cursor = false, -- Default to not moving cursor
-		stop_key = "<C-c>", -- Default stop key
-	},
-}
+local state = require("pacer.state")
 
 local function clear()
 	if state.ns and state.bufnr and vim.api.nvim_buf_is_valid(state.bufnr) then
-		-- Clear all highlights in the namespace
+		-- Clear all highlights
 		vim.api.nvim_buf_clear_namespace(state.bufnr, state.ns, 0, -1)
 	end
 end
 
-function state.stop()
+local M = {}
+
+-- Stop the pacer
+function M.stop()
 	if state.timer then
 		Timer.stop(state.timer)
 		state.timer = nil
 	end
 	clear()
-	state.remove_keymap()
+
+	-- Explicitly clear focus highlights
+	if state.bufnr and vim.api.nvim_buf_is_valid(state.bufnr) then
+		require("pacer.focus").clear_highlights(state.bufnr)
+	end
+
+	M.remove_keymap()
+	state.active = false
+	state.paused = false
 end
 
--- Modify step function to conditionally move cursor
-local function step()
+-- Step function to move through words
+function M.step()
 	if state.cur_word > #state.words then
 		clear()
 		Timer.stop(state.timer)
 		state.timer = nil
-		state.remove_keymap() -- Remove keymap when finished
+		M.remove_keymap()
+
+		if state.bufnr and vim.api.nvim_buf_is_valid(state.bufnr) then
+			require("pacer.focus").clear_highlights(state.bufnr)
+		end
+
+		state.active = false
 		return
 	end
+
 	clear()
+
 	local w = state.words[state.cur_word]
 	if w then
 		H.highlight_word(state.bufnr, state.ns, w.lnum, w.col, w.len)
 
-		-- Move cursor if configured to do so
+		state.current_position = {
+			line = w.lnum,
+			col = w.col,
+			bufnr = state.bufnr,
+		}
+
 		if state.config.move_cursor then
 			vim.api.nvim_win_set_cursor(0, { w.lnum + 1, w.col })
+		end
+
+		if state.config.focus and state.config.focus.enabled then
+			local focus = require("pacer.focus")
+			focus.apply_focus(state.config)
 		end
 
 		state.last_word_idx = state.cur_word
@@ -56,25 +71,38 @@ local function step()
 	end
 end
 
--- Add keybinding management functions
-function state.add_keymap()
+-- Add keybinding
+function M.add_keymap()
 	if not state.keymap_active then
 		vim.keymap.set("n", state.config.stop_key, function()
 			vim.notify("Pacer stopped", "info")
-			state.pause()
-			state.remove_keymap()
+			M.pause()
+			M.remove_keymap()
 		end, { noremap = true, silent = true, desc = "Stop pacer" })
+
+		-- Add speed controls
+		vim.keymap.set("n", "<C-.>", function()
+			state.adjust_speed(10) -- Increase speed (lower delay)
+		end, { noremap = true, silent = true, desc = "Increase pacer speed" })
+
+		vim.keymap.set("n", "<C-,>", function()
+			state.adjust_speed(-10) -- Decrease speed (higher delay)
+		end, { noremap = true, silent = true, desc = "Decrease pacer speed" })
+
 		state.keymap_active = true
 	end
 end
 
-function state.remove_keymap()
+function M.remove_keymap()
 	if state.keymap_active then
 		vim.keymap.del("n", state.config.stop_key)
+		vim.keymap.del("n", "<C-.>")
+		vim.keymap.del("n", "<C-,>")
 		state.keymap_active = false
 	end
 end
 
+-- Get words from buffer
 local function get_words(bufnr)
 	local words = {}
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -96,103 +124,94 @@ local function get_words(bufnr)
 	return words
 end
 
-function state.restart(options)
+-- Restart pacer with options
+function M.restart(options)
 	options = options or {}
 
-	local config = require("pacer.config")
-	local default_speed = config.options.speed or 250
-
-	-- Handle both direct speed and preset configuration
-	local speed = options.speed or default_speed
-
-	-- Apply other options from preset or defaults
-	if options.highlight then
-		-- Apply highlight settings from preset
-		local highlight = require("pacer.highlight")
-		config.options.highlight = vim.tbl_deep_extend("force", config.options.highlight, options.highlight)
-		highlight.refresh_highlight()
+	-- Apply config from options
+	if options.preset then
+		-- Get preset configuration
+		local config_module = require("pacer.config")
+		local preset_config = config_module.get_preset_config(options.preset)
+		state.apply_config(preset_config)
+	else
+		-- Apply direct options
+		state.apply_config(options)
 	end
 
-	-- Apply configuration options
-	if options.move_cursor ~= nil then
-		state.config.move_cursor = options.move_cursor
-	end
-
-	if options.stop_key then
-		state.config.stop_key = options.stop_key
-	end
-
-	-- Rest of your existing restart function
+	-- Setup pacer state
 	state.bufnr = vim.api.nvim_get_current_buf()
 	state.ns = H.create_namespace()
 	state.words = get_words(state.bufnr)
-	state.cur_word = options.from_word or 1
+
+	local start_word = 1
+	if options.start_from_cursor and not options.from_word then
+		local cursor = vim.api.nvim_win_get_cursor(0)
+		local cursor_line = cursor[1] - 1
+		local cursor_col = cursor[2]
+
+		for i, word in ipairs(state.words) do
+			if word.lnum > cursor_line or (word.lnum == cursor_line and word.col >= cursor_col) then
+				start_word = i
+				break
+			end
+
+			if i == #state.words then
+				start_word = i
+			end
+		end
+	end
+
+	state.cur_word = options.from_word or start_word
+	state.active = true
+	state.paused = false
 
 	clear()
 
 	if state.timer then
 		Timer.stop(state.timer)
 	end
-	state.timer = Timer.start(function()
-		step()
-	end, speed)
-	state.paused = false
 
-	-- Add stop keymap when pacer starts
-	state.add_keymap()
+	state.timer = Timer.start(function()
+		M.step()
+	end, state.config.speed)
+
+	M.add_keymap()
 end
 
--- Update pause function to remove keymap
-function state.pause()
+function M.pause()
 	if state.timer then
 		Timer.stop(state.timer)
 	end
+
+	clear()
+
+	-- Explicitly clear focus highlights
+	if state.bufnr and vim.api.nvim_buf_is_valid(state.bufnr) then
+		require("pacer.focus").clear_highlights(state.bufnr)
+	end
+
 	state.paused = true
-	state.remove_keymap()
+	M.remove_keymap()
 end
 
--- Add configuration function
-function state.configure(user_config)
-	user_config = user_config or {}
-	state.config.move_cursor = user_config.move_cursor or state.config.move_cursor
-	state.config.stop_key = user_config.stop_key or state.config.stop_key
-end
-
--- Update setup function to accept configuration
-function state.setup(config)
-	state.configure(config)
-
-	-- User commands
-	vim.api.nvim_create_user_command("PacerStart", function(opts)
-		state.restart({ speed = tonumber(opts.args) or default_speed })
-	end, { nargs = "?", desc = "Start pacer (optional speed in ms)" })
-
-	vim.api.nvim_create_user_command("PacerPause", function()
-		state.pause()
-	end, {})
-	vim.api.nvim_create_user_command("PacerResume", function()
-		state.resume()
-	end, {})
-	vim.api.nvim_create_user_command("PacerResumeCursor", function()
-		state.resume_from_cursor()
-	end, {})
-
-	-- React to insert, change, etc (auto-pause)
-	vim.api.nvim_create_autocmd({ "InsertEnter", "TextChanged", "TextChangedI" }, {
-		callback = function()
-			state.pause()
-		end,
-	})
-
-	-- Optional: autocmd BufLeave, etc
-end
-
-function state.resume()
+function M.resume()
 	if state.paused and state.last_word_idx then
-		state.restart({ from_word = state.last_word_idx })
+		M.restart({ from_word = state.last_word_idx })
 	else
-		state.restart()
+		M.restart()
 	end
 end
 
-return state
+-- Export the module
+local module = {
+	restart = M.restart,
+	pause = M.pause,
+	resume = M.resume,
+	stop = M.stop,
+	step = M.step,
+	add_keymap = M.add_keymap,
+	remove_keymap = M.remove_keymap,
+}
+
+return module

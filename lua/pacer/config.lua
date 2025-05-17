@@ -9,13 +9,15 @@ M.defaults = {
 	speed = 250,
 	auto_pause = true,
 	stop_key = "<C-c>",
+	move_cursor = true,
+	focus = {
+		enabled = true,
+		dim_color = "#777777",
+		dim_style = "italic",
+	},
 	presets = {
 		Code = {
 			speed = 150,
-			highlight = {
-				bg = "#2b4f76",
-				fg = "#ffffff",
-			},
 		},
 		Article = {
 			speed = 300,
@@ -53,6 +55,11 @@ M.options = {}
 
 function M.setup(opts)
 	M.options = vim.tbl_deep_extend("force", {}, M.defaults, opts or {})
+
+	-- Initialize the state with the base config
+	local state = require("pacer.state")
+	state.apply_config(M.options)
+
 	return M.options
 end
 
