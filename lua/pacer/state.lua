@@ -65,4 +65,12 @@ function M.save_position()
 	}
 end
 
+function M.clear_position()
+	M.last_position = {
+		bufnr = nil,
+		line = 0,
+		col = 0,
+	}
+end
+
 return M

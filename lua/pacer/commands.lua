@@ -28,10 +28,8 @@ function M.start_pacer(args)
 end
 
 function M.stop_pacer()
-	-- Save position
-	state.save_position()
+	state.clear_position()
 
-	-- Stop pacer
 	pacer.stop()
 end
 
