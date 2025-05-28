@@ -4,26 +4,15 @@ M.defaults = {
 	highlight = {
 		bg = "#335577",
 		fg = "#ffffff",
-		style = "bold underline",
+		style = "underline",
 	},
 	wpm = 300,
 	pause_key = "<C-c>",
 	move_cursor = true,
-	paragraph_delay_multiplier = 2,
+	paragraph_delay_multiplier = 1.75,
 	focus = {
 		enabled = true,
 		dim_color = "#777777",
-	},
-	presets = {
-		Code = {
-			wpm = 500,
-		},
-		Article = {
-			wpm = 350,
-		},
-		LongForm = {
-			wpm = 400,
-		},
 	},
 }
 
