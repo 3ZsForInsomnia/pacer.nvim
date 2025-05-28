@@ -197,7 +197,7 @@ end
 function M.add_keymap()
 	if not state.keymap_active then
 		v.keymap.set("n", state.config.pause_key, function()
-			v.notify("Pacer stopped", "info")
+			v.notify("Pacer stopped", v.log.levels.INFO)
 			M.pause()
 			M.remove_keymap()
 		end, { noremap = true, silent = true, desc = "Stop pacer" })
