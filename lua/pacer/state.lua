@@ -66,6 +66,11 @@ function M.save_position()
 end
 
 function M.clear_position()
+	M.current_position = {
+		bufnr = nil,
+		line = 0,
+		col = 0,
+	}
 	M.last_position = {
 		bufnr = nil,
 		line = 0,

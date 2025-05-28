@@ -28,9 +28,11 @@ function M.start_pacer(args)
 end
 
 function M.stop_pacer()
-	state.clear_position()
-
 	pacer.stop()
+
+	v.defer_fn(function()
+		state.clear_position()
+	end, 0)
 end
 
 function M.resume_pacer()
