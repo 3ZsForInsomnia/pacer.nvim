@@ -171,8 +171,7 @@ function M.apply_focus(config)
 	end
 
 	local dim_color = config.focus.dim_color or "#777777"
-	local dim_style = config.focus.dim_style or "italic"
-	vim.cmd(string.format("highlight PacerDimText guifg=%s gui=%s", dim_color, dim_style))
+	vim.cmd(string.format("highlight PacerDimText guifg=%s", dim_color))
 
 	local bufnr = state.current_position and state.current_position.bufnr or vim.api.nvim_get_current_buf()
 

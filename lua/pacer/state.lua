@@ -1,3 +1,5 @@
+local defaultConfig = require("pacer.config").defaults
+
 local M = {}
 
 M.active = false
@@ -22,21 +24,7 @@ M.current_position = {
 	bufnr = nil,
 }
 
-M.config = {
-	speed = 250,
-	highlight = {
-		bg = "#335577",
-		fg = "#ffffff",
-		bold = true,
-	},
-	move_cursor = false,
-	stop_key = "<C-c>",
-	focus = {
-		enabled = false,
-		dim_color = "#777777",
-		dim_style = "italic",
-	},
-}
+M.config = defaultConfig
 
 function M.apply_config(config)
 	-- Deep merge the configs
@@ -48,8 +36,12 @@ function M.apply_config(config)
 	end
 end
 
-function M.adjust_speed(change)
-	M.config.speed = math.max(10, M.config.speed + change)
+function M.adjust_wpm(change)
+	local old_wpm = M.config.wpm
+	M.config.wpm = math.max(60, M.config.wpm + change) -- Min 60 WPM (1 word per second)
+
+	-- Convert WPM to milliseconds per word
+	local ms_per_word = math.floor(60000 / M.config.wpm)
 
 	-- If timer is active, restart it with new speed
 	if M.timer then
@@ -57,10 +49,10 @@ function M.adjust_speed(change)
 		Timer.stop(M.timer)
 		M.timer = Timer.start(function()
 			require("pacer.core").step()
-		end, M.config.speed)
+		end, ms_per_word)
 	end
 
-	vim.notify("Pacer speed: " .. M.config.speed .. "ms", vim.log.levels.INFO)
+	vim.notify("Pacer speed: " .. M.config.wpm .. " WPM (was " .. old_wpm .. " WPM)", vim.log.levels.INFO)
 end
 
 function M.save_position()

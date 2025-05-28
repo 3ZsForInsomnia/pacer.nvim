@@ -8,18 +8,41 @@ local state = require("pacer.state")
 M.ns_id = nil
 local HL_GROUP = "PacerHighlight"
 
+local allowed_styles = {
+	"NONE",
+	"bold",
+	"italic",
+	"underline",
+	"undercurl",
+}
+
 -- Helper function to set up the highlight with config values
 local function setup_highlight(config)
 	config = config or state.config
 
 	local hl_config = config.highlight
+	local style = hl_config.style or "NONE"
+	local styles = {}
+
+	for s in string.gmatch(style, "[^,%s]+") do
+		if v.tbl_contains(allowed_styles, s) then
+			table.insert(styles, s)
+		end
+	end
+
+	local final_style = table.concat(styles, ",")
+	if final_style == "" then
+		final_style = "NONE"
+	end
+
 	local cmd = string.format(
 		"highlight %s guibg=%s guifg=%s gui=%s",
 		HL_GROUP,
 		hl_config.bg or "#335577",
 		hl_config.fg or "#ffffff",
-		hl_config.bold and "bold" or "NONE"
+		final_style
 	)
+
 	c(cmd)
 end
 

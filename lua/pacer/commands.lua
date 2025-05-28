@@ -11,10 +11,10 @@ function M.start_pacer(args)
 	local options = {}
 
 	if args.args and args.args ~= "" then
-		local speed = tonumber(args.args)
+		local wpm = tonumber(args.args)
 
-		if speed then
-			options.speed = speed
+		if wpm then
+			options.wpm = wpm
 		else
 			options.preset = args.args
 		end

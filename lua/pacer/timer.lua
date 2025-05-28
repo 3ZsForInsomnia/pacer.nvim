@@ -2,8 +2,21 @@ local M = {}
 local uv = vim.loop
 
 function M.start(fn, interval_ms)
+	-- Ensure interval is reasonable
+	interval_ms = math.max(50, interval_ms) -- Set minimum threshold
+
 	local timer = uv.new_timer()
-	timer:start(0, interval_ms, vim.schedule_wrap(fn))
+
+	-- Use one-shot timer (repeating=0)
+	timer:start(
+		interval_ms,
+		0,
+		vim.schedule_wrap(function()
+			fn()
+			-- Timer is auto-closed since it's one-shot
+		end)
+	)
+
 	return timer
 end
 
