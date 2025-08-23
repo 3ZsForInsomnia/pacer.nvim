@@ -8,6 +8,9 @@ local pacer = require("pacer.core")
 local state = require("pacer.state")
 
 function M.start_pacer(args)
+	-- Ensure pacer is fully setup if lazy loaded
+	require("pacer.config").ensure_setup()
+
 	local options = {}
 
 	if args.args and args.args ~= "" then
@@ -28,6 +31,9 @@ function M.start_pacer(args)
 end
 
 function M.stop_pacer()
+	-- Ensure pacer is fully setup if lazy loaded
+	require("pacer.config").ensure_setup()
+
 	pacer.stop()
 
 	v.defer_fn(function()
@@ -36,6 +42,9 @@ function M.stop_pacer()
 end
 
 function M.resume_pacer()
+	-- Ensure pacer is fully setup if lazy loaded
+	require("pacer.config").ensure_setup()
+
 	-- Check if we have a valid last position
 	if not state.last_position.bufnr then
 		n("Pacer: No previous position to resume from", l.levels.WARN)
@@ -57,10 +66,24 @@ function M.resume_pacer()
 	pacer.resume()
 end
 
+function M.pause_pacer()
+	-- Ensure pacer is fully setup if lazy loaded
+	require("pacer.config").ensure_setup()
+
+	pacer.pause()
+end
+
 function M.setup()
+	-- Mark that commands have been setup
+	vim.g.pacer_commands_setup = true
+
 	a.nvim_create_user_command("PacerStart", function(args)
 		M.start_pacer(args)
 	end, { nargs = "?", desc = "Start the pacer (optional: specify speed or preset)" })
+
+	a.nvim_create_user_command("PacerPause", function()
+		M.pause_pacer()
+	end, { desc = "Pause the pacer" })
 
 	a.nvim_create_user_command("PacerStop", function()
 		M.stop_pacer()

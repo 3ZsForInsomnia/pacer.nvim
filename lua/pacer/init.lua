@@ -5,7 +5,11 @@ function M.setup(opts)
 	config.setup(opts)
 
 	require("pacer.highlight").refresh_highlight()
-	require("pacer.commands").setup()
+	-- Only setup commands if not already done (e.g., by plugin loading)
+	if not vim.g.pacer_commands_setup then
+		require("pacer.commands").setup()
+		vim.g.pacer_commands_setup = true
+	end
 	require("pacer.focus").setup()
 end
 

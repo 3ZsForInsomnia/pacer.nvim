@@ -26,7 +26,26 @@ Setup (for lazy.nvim):
 ```lua
 return {
   "your-username/pacer.nvim",
-  cmd = { "PacerStart", "PacerPause", "PacerResume" },
+  cmd = { "PacerStart", "PacerResume" },
+  -- Plugin will be automatically loaded when any of the above commands are used
+  -- You can also add keys or events for other loading triggers:
+  -- keys = { "<leader>p" }, -- e.g., load on key mapping
+  -- event = "BufRead", -- e.g., load when reading any buffer
+  init = function()
+    -- Ensure commands are available immediately
+    vim.api.nvim_create_user_command("PacerStart", function() 
+      require("pacer.commands").start_pacer({args = ""}) 
+    end, { nargs = "?", desc = "Start the pacer" })
+    vim.api.nvim_create_user_command("PacerPause", function() 
+      require("pacer.commands").pause_pacer() 
+    end, { desc = "Pause the pacer" })
+    vim.api.nvim_create_user_command("PacerResume", function() 
+      require("pacer.commands").resume_pacer() 
+    end, { desc = "Resume the pacer" })
+    vim.api.nvim_create_user_command("PacerStop", function() 
+      require("pacer.commands").stop_pacer() 
+    end, { desc = "Stop the pacer" })
+  end,
   opts = {
     -- Set the colors for the currently highlighted word
     highlight = {
