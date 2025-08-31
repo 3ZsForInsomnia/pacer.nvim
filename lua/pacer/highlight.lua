@@ -20,6 +20,11 @@ local allowed_styles = {
 local function setup_highlight(config)
 	config = config or state.config
 
+	if not config or not config.highlight then
+		print("Pacer: Invalid config for highlight setup, using defaults")
+		config = { highlight = M.defaults and M.defaults.highlight or { bg = "#335577", fg = "#ffffff", style = "underline" } }
+	end
+
 	local hl_config = config.highlight
 	local style = hl_config.style or "NONE"
 	local styles = {}
@@ -43,36 +48,76 @@ local function setup_highlight(config)
 		final_style
 	)
 
-	c(cmd)
+	local ok, err = pcall(c, cmd)
+	if not ok then
+		print("Pacer: Failed to setup highlight: " .. tostring(err))
+		-- Try with basic highlight as fallback
+		pcall(c, "highlight " .. HL_GROUP .. " guibg=#335577 guifg=#ffffff gui=underline")
+	end
 end
 
 -- Set up our highlight group on colorscheme change
-v.api.nvim_create_autocmd("ColorScheme", {
+local ok, err = pcall(v.api.nvim_create_autocmd, "ColorScheme", {
 	callback = function()
-		setup_highlight()
+		local highlight_ok, highlight_err = pcall(setup_highlight)
+		if not highlight_ok then
+			print("Pacer: Failed to refresh highlight on colorscheme change: " .. tostring(highlight_err))
+		end
 	end,
 })
+if not ok then
+	print("Pacer: Failed to setup colorscheme autocmd: " .. tostring(err))
+end
 
 function M.create_namespace()
 	if M.ns_id == nil then
-		M.ns_id = a.nvim_create_namespace("Pacer")
+		local ok, ns_id = pcall(a.nvim_create_namespace, "Pacer")
+		if ok then
+			M.ns_id = ns_id
+		else
+			print("Pacer: Failed to create namespace: " .. tostring(ns_id))
+			return nil
+		end
 	end
 	return M.ns_id
 end
 
 function M.highlight_word(bufnr, ns, lnum, col, len)
-	a.nvim_buf_set_extmark(bufnr, ns, lnum, col, {
+	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+		print("Pacer: Cannot highlight word - invalid buffer")
+		return false
+	end
+	
+	if not ns or not lnum or not col or not len then
+		print("Pacer: Cannot highlight word - missing parameters")
+		return false
+	end
+	
+	local ok, err = pcall(a.nvim_buf_set_extmark, bufnr, ns, lnum, col, {
 		end_col = col + len,
 		hl_group = HL_GROUP,
 	})
+	
+	if not ok then
+		print("Pacer: Failed to set highlight extmark: " .. tostring(err))
+		return false
+	end
+	
+	return true
 end
 
 -- Apply highlight when the module loads
-setup_highlight()
+local ok, err = pcall(setup_highlight)
+if not ok then
+	print("Pacer: Failed to setup initial highlight: " .. tostring(err))
+end
 
 -- Function to refresh highlight when config changes
 function M.refresh_highlight(config)
-	setup_highlight(config)
+	local ok, err = pcall(setup_highlight, config)
+	if not ok then
+		print("Pacer: Failed to refresh highlight: " .. tostring(err))
+	end
 end
 
 return M

@@ -42,6 +42,7 @@ function M.update_progress()
 		return
 	end
 
+	local ok, err = pcall(function()
 	local total_words = #state.words
 	local current_pos = state.cur_word or 1
 	local percent_done = math.floor((current_pos / total_words) * 100)
@@ -66,16 +67,22 @@ function M.update_progress()
 	if should_notify then
 		last_notification_time = now
 
-		local message = string.format("Pacer: %d%% complete (%s remaining)", percent_done, time_text)
-		v.notify(message, v.log.levels.INFO, {
-			title = "Pacer Progress",
-			icon = "📖",
-			timeout = 2000,
-		})
+			local short_message = string.format("%d%% (%s left)", percent_done, time_text)
+			local long_message = string.format("Pacer: %d%% complete (%s remaining) - word %d of %d at %d WPM", 
+				percent_done, time_text, current_pos, total_words, state.config.wpm)
+			
+			v.api.nvim_echo({{short_message, "Normal"}}, false, {})
+			print(long_message)
+	end
+	end)
+	
+	if not ok then
+		print("Pacer: Error updating progress: " .. tostring(err))
 	end
 end
 
 function M.clear_progress()
+	print("Pacer: Clearing progress tracking")
 	last_notification_time = 0
 	last_milestone_percent = -1
 end

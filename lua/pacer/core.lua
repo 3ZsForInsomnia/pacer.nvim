@@ -6,8 +6,19 @@ local state = require("pacer.state")
 local progress = require("pacer.progress")
 local M = {}
 
+-- Safe operation wrapper for buffer operations
+local function safe_operation(operation_name, operation)
+	local ok, result = pcall(operation)
+	if not ok then
+		print("Pacer: " .. operation_name .. " failed: " .. tostring(result))
+		-- Don't reset state here, let caller decide
+		return false, result
+	end
+	return true, result
+end
+
 function M.check_scroll_position()
-	if not state.active or not state.bufnr then
+	if not state.active or not state.bufnr or not vim.api.nvim_buf_is_valid(state.bufnr) then
 		return
 	end
 
@@ -16,8 +27,14 @@ function M.check_scroll_position()
 		return
 	end
 
-	local win = v.api.nvim_get_current_win()
-	local win_info = v.fn.getwininfo(win)[1]
+	local ok, win_info = safe_operation("get window info", function()
+		local win = v.api.nvim_get_current_win()
+		return v.fn.getwininfo(win)[1]
+	end)
+
+	if not ok or not win_info then
+		return
+	end
 
 	-- Calculate visible region
 	local top_line = win_info.topline - 1 -- Convert to 0-indexed
@@ -29,13 +46,32 @@ function M.check_scroll_position()
 	if current_line > bottom_quarter_line then
 		local target_topline = current_line - math.floor(visible_lines * 0.25)
 
-		v.fn.winrestview({ topline = target_topline + 1 }) -- Convert back to 1-indexed
+		safe_operation("scroll window", function()
+			v.fn.winrestview({ topline = target_topline + 1 })
+		end)
 	end
 end
 
 local function get_words(bufnr)
+	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+		print("Pacer: get_words called with invalid buffer")
+		return {}
+	end
+
 	local words = {}
-	local lines = v.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local ok, lines = safe_operation("get buffer lines", function()
+		return v.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	end)
+
+	if not ok or not lines then
+		print("Pacer: Failed to get buffer lines")
+		return {}
+	end
+
+	if #lines == 0 then
+		print("Pacer: Buffer is empty")
+		return {}
+	end
 
 	for lnum, line in ipairs(lines) do
 		if line:match("%S") then
@@ -59,6 +95,7 @@ local function get_words(bufnr)
 		end
 	end
 
+	print("Pacer: Extracted " .. #words .. " words from buffer")
 	return words
 end
 
@@ -163,7 +200,7 @@ function M.find_paragraph_boundary(direction)
 end
 
 function M.navigate_paragraph(direction)
-	if not state.active then
+	if not state.active or not state.validate_state() then
 		return
 	end
 
@@ -187,6 +224,7 @@ function M.navigate_paragraph(direction)
 
 		if state.timer then
 			Timer.stop(state.timer)
+			state.timer = nil
 			state.timer = Timer.start(function()
 				M.step()
 			end, state.config.wpm)
@@ -196,27 +234,38 @@ end
 
 function M.add_keymap()
 	if not state.keymap_active then
-		v.keymap.set("n", state.config.pause_key, function()
-			v.notify("Pacer stopped", v.log.levels.INFO)
-			M.pause()
-			M.remove_keymap()
-		end, { noremap = true, silent = true, desc = "Stop pacer" })
+		safe_operation("set pause keymap", function()
+			v.keymap.set("n", state.config.pause_key, function()
+				v.api.nvim_echo({ { "Pacer paused", "Normal" } }, false, {})
+				print("Pacer: Paused by user")
+				M.pause()
+				M.remove_keymap()
+			end, { noremap = true, silent = true, desc = "Pause pacer" })
+		end)
 
-		v.keymap.set("n", "<C-.>", function()
-			state.adjust_wpm(10) -- Increase speed (lower delay)
-		end, { noremap = true, silent = true, desc = "Increase pacer speed" })
+		safe_operation("set speed increase keymap", function()
+			v.keymap.set("n", "<C-.>", function()
+				state.adjust_wpm(10) -- Increase speed (lower delay)
+			end, { noremap = true, silent = true, desc = "Increase pacer speed" })
+		end)
 
-		v.keymap.set("n", "<C-,>", function()
-			state.adjust_wpm(-10) -- Decrease speed (higher delay)
-		end, { noremap = true, silent = true, desc = "Decrease pacer speed" })
+		safe_operation("set speed decrease keymap", function()
+			v.keymap.set("n", "<C-,>", function()
+				state.adjust_wpm(-10) -- Decrease speed (higher delay)
+			end, { noremap = true, silent = true, desc = "Decrease pacer speed" })
+		end)
 
-		v.keymap.set("n", "<C-n>", function()
-			M.navigate_paragraph("next")
-		end, { noremap = true, silent = true, desc = "Jump to next paragraph" })
+		safe_operation("set next paragraph keymap", function()
+			v.keymap.set("n", "<C-n>", function()
+				M.navigate_paragraph("next")
+			end, { noremap = true, silent = true, desc = "Jump to next paragraph" })
+		end)
 
-		v.keymap.set("n", "<C-p>", function()
-			M.navigate_paragraph("prev")
-		end, { noremap = true, silent = true, desc = "Jump to previous paragraph" })
+		safe_operation("set prev paragraph keymap", function()
+			v.keymap.set("n", "<C-p>", function()
+				M.navigate_paragraph("prev")
+			end, { noremap = true, silent = true, desc = "Jump to previous paragraph" })
+		end)
 
 		state.keymap_active = true
 	end
@@ -224,49 +273,67 @@ end
 
 function M.remove_keymap()
 	if state.keymap_active then
-		v.keymap.del("n", state.config.pause_key)
-		v.keymap.del("n", "<C-.>")
-		v.keymap.del("n", "<C-,>")
-		v.keymap.del("n", "<C-n>")
-		v.keymap.del("n", "<C-p>")
+		-- Safely remove keymaps
+		pcall(v.keymap.del, "n", state.config.pause_key)
+		pcall(v.keymap.del, "n", "<C-.>")
+		pcall(v.keymap.del, "n", "<C-,>")
+		pcall(v.keymap.del, "n", "<C-n>")
+		pcall(v.keymap.del, "n", "<C-p>")
 		state.keymap_active = false
 	end
 end
 
 local function clear()
 	if state.ns and state.bufnr and v.api.nvim_buf_is_valid(state.bufnr) then
-		v.api.nvim_buf_clear_namespace(state.bufnr, state.ns, 0, -1)
+		safe_operation("clear namespace", function()
+			v.api.nvim_buf_clear_namespace(state.bufnr, state.ns, 0, -1)
+		end)
 	end
 end
 
 -- Stop the pacer
 function M.stop()
+	print("Pacer: Stopping pacer and cleaning up resources")
+
 	if state.timer then
 		Timer.stop(state.timer)
 		state.timer = nil
 	end
 
 	clear()
-	progress.clear_progress()
+
+	safe_operation("clear progress", function()
+		progress.clear_progress()
+	end)
 
 	if state.bufnr and v.api.nvim_buf_is_valid(state.bufnr) then
-		require("pacer.focus").clear_highlights(state.bufnr)
+		safe_operation("clear focus highlights", function()
+			require("pacer.focus").clear_highlights(state.bufnr)
+		end)
 	end
 
 	M.remove_keymap()
 	state.active = false
 	state.paused = false
-	state.wpm = state.config.wpm
 end
 
 function M.step()
+	-- Validate state before each step
+	if not state.validate_state() then
+		return
+	end
+
 	if state.cur_word > #state.words then
 		-- End of file handling
+		print("Pacer: Reached end of text, stopping")
 		clear()
-		Timer.stop(state.timer)
-		state.timer = nil
+		if state.timer then
+			Timer.stop(state.timer)
+			state.timer = nil
+		end
 		M.remove_keymap()
 		state.active = false
+		v.api.nvim_echo({ { "Reading complete", "Normal" } }, false, {})
 		return
 	end
 
@@ -274,7 +341,13 @@ function M.step()
 
 	local w = state.words[state.cur_word]
 	if w then
-		H.highlight_word(state.bufnr, state.ns, w.lnum, w.col, w.len)
+		local ok = safe_operation("highlight word", function()
+			H.highlight_word(state.bufnr, state.ns, w.lnum, w.col, w.len)
+		end)
+
+		if not ok then
+			print("Pacer: Failed to highlight word, attempting to continue")
+		end
 
 		state.current_position = {
 			line = w.lnum,
@@ -283,14 +356,18 @@ function M.step()
 		}
 
 		if state.config.move_cursor then
-			v.api.nvim_win_set_cursor(0, { w.lnum + 1, w.col })
+			safe_operation("move cursor", function()
+				v.api.nvim_win_set_cursor(0, { w.lnum + 1, w.col })
+			end)
 		end
 
 		M.check_scroll_position()
 
 		if state.config.focus and state.config.focus.enabled then
-			local focus = require("pacer.focus")
-			focus.apply_focus(state.config)
+			safe_operation("apply focus", function()
+				local focus = require("pacer.focus")
+				focus.apply_focus(state.config)
+			end)
 		end
 
 		state.last_word_idx = state.cur_word
@@ -305,11 +382,14 @@ function M.step()
 			next_delay = ms_per_word * state.config.paragraph_delay_multiplier
 		end
 
-		progress.update_progress()
+		safe_operation("update progress", function()
+			progress.update_progress()
+		end)
 
 		-- Reset timer with appropriate delay
 		if state.timer then
 			Timer.stop(state.timer)
+			state.timer = nil
 		end
 		state.timer = Timer.start(function()
 			M.step()
@@ -320,6 +400,8 @@ end
 function M.restart(options)
 	options = options or {}
 
+	print("Pacer: Restarting with options: " .. vim.inspect(options))
+
 	if options.preset then
 		local config_module = require("pacer.config")
 		local preset_config = config_module.get_preset_config(options.preset)
@@ -328,24 +410,56 @@ function M.restart(options)
 		state.apply_config(options)
 	end
 
-	state.bufnr = v.api.nvim_get_current_buf()
-	state.ns = H.create_namespace()
+	local current_buf = v.api.nvim_get_current_buf()
+	if not vim.api.nvim_buf_is_valid(current_buf) then
+		print("Pacer: Cannot restart - current buffer is invalid")
+		state.reset_to_safe_state()
+		return
+	end
+
+	state.bufnr = current_buf
+
+	local ok, ns = safe_operation("create namespace", function()
+		return H.create_namespace()
+	end)
+
+	if not ok then
+		print("Pacer: Failed to create namespace")
+		state.reset_to_safe_state()
+		return
+	end
+
+	state.ns = ns
 	state.words = get_words(state.bufnr)
+
+	if #state.words == 0 then
+		v.api.nvim_echo({ { "No words found to read", "WarningMsg" } }, false, {})
+		print("Pacer: No words found in buffer, cannot start")
+		state.reset_to_safe_state()
+		return
+	end
 
 	local start_word = 1
 	if options.start_from_cursor and not options.from_word then
-		local cursor = v.api.nvim_win_get_cursor(0)
-		local cursor_line = cursor[1] - 1
-		local cursor_col = cursor[2]
+		local ok, cursor = safe_operation("get cursor position", function()
+			return v.api.nvim_win_get_cursor(0)
+		end)
 
-		for i, word in ipairs(state.words) do
-			if word.lnum > cursor_line or (word.lnum == cursor_line and word.col >= cursor_col) then
-				start_word = i
-				break
-			end
+		if not ok then
+			print("Pacer: Could not get cursor position, starting from beginning")
+		else
+			local cursor_line = cursor[1] - 1
+			local cursor_col = cursor[2]
 
-			if i == #state.words then
-				start_word = i
+			for i, word in ipairs(state.words) do
+				if word.lnum > cursor_line or (word.lnum == cursor_line and word.col >= cursor_col) then
+					start_word = i
+					break
+				end
+
+				if i == #state.words then
+					start_word = i
+				end
 			end
 		end
 	end
@@ -355,10 +469,14 @@ function M.restart(options)
 	state.paused = false
 
 	clear()
-	progress.update_progress()
+
+	safe_operation("update initial progress", function()
+		progress.update_progress()
+	end)
 
 	if state.timer then
 		Timer.stop(state.timer)
+		state.timer = nil
 	end
 
 	local ms_per_word = math.floor(60 * 1000 / state.config.wpm)
@@ -368,18 +486,24 @@ function M.restart(options)
 	end, ms_per_word)
 
 	M.add_keymap()
+	print("Pacer: Started successfully - " .. #state.words .. " words, starting from word " .. state.cur_word)
 end
 
 function M.pause()
+	print("Pacer: Pausing pacer")
+
 	if state.timer then
 		Timer.stop(state.timer)
+		state.timer = nil
 	end
 
 	clear()
 
 	-- Explicitly clear focus highlights
 	if state.bufnr and v.api.nvim_buf_is_valid(state.bufnr) then
-		require("pacer.focus").clear_highlights(state.bufnr)
+		safe_operation("clear focus on pause", function()
+			require("pacer.focus").clear_highlights(state.bufnr)
+		end)
 	end
 
 	state.paused = true
@@ -387,6 +511,8 @@ function M.pause()
 end
 
 function M.resume()
+	print("Pacer: Resuming pacer")
+
 	if state.paused and state.last_word_idx then
 		M.restart({ from_word = state.last_word_idx })
 	else

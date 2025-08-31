@@ -1,5 +1,4 @@
 # pacer.nvim
-
 ## Intro
 
 A reading pacer for Neovim to help you read faster!
@@ -17,6 +16,7 @@ This plugin aims to bring pacer-based reading to Neovim that is ready to go out 
 :PacerPause             -- Saves the current position and pauses the pacer
 :PacerStop              -- Stops the pacer and resets the position
 :PacerResume            -- Resumes the pacer from the last saved position
+:PacerValidate          -- Validates your configuration and environment
 ```
 
 ## Config
@@ -26,7 +26,7 @@ Setup (for lazy.nvim):
 ```lua
 return {
   "your-username/pacer.nvim",
-  cmd = { "PacerStart", "PacerResume" },
+  cmd = { "PacerStart", "PacerResume", "PacerValidate" },
   -- Plugin will be automatically loaded when any of the above commands are used
   -- You can also add keys or events for other loading triggers:
   -- keys = { "<leader>p" }, -- e.g., load on key mapping
@@ -45,6 +45,9 @@ return {
     vim.api.nvim_create_user_command("PacerStop", function() 
       require("pacer.commands").stop_pacer() 
     end, { desc = "Stop the pacer" })
+    vim.api.nvim_create_user_command("PacerValidate", function() 
+      require("pacer.commands").validate_pacer() 
+    end, { desc = "Validate Pacer setup" })
   end,
   opts = {
     -- Set the colors for the currently highlighted word
@@ -109,9 +112,14 @@ Decrease Pacer speed:       `<C-,>`
 Jump to next paragraph:     `<C-n>`
 Jump to previous paragraph: `<C-p>`
 
-## Roadmap
+## Error Handling & Troubleshooting
 
-1. Add blackbox tests to cover existing behaviors.
-1. Refactor the code to make it more readable, maintainable. Also add type definitions.
-1. Increase configurability, e.g. for additional keybindings.
-1. Auto-detect current text fg and bg colors to automatically set proper current-word highlighting and dimming colors?
+The plugin includes comprehensive error handling and will:
+- Validate input parameters (WPM must be between 60-2000)
+- Handle buffer deletion gracefully
+- Automatically recover from inconsistent states
+- Provide minimal user notifications with detailed logging to `:messages`
+- Clean up resources automatically on Neovim exit
+- Validate configuration and environment on plugin load
+
+If you encounter any issues, check `:messages` for detailed error information, or run `:PacerValidate` to check your setup.
