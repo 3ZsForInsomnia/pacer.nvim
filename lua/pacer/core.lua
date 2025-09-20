@@ -491,6 +491,11 @@ end
 function M.pause()
 	log.info("Pausing pacer", true)
 
+	-- Save current position for potential resume
+	if state.cur_word then
+		state.last_word_idx = state.cur_word - 1 -- Save the current word we were on
+	end
+
 	if state.timer then
 		Timer.stop(state.timer)
 		state.timer = nil
@@ -506,6 +511,7 @@ function M.pause()
 	end
 
 	state.paused = true
+	state.active = false
 	M.remove_keymap()
 end
 

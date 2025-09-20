@@ -122,12 +122,20 @@ end
 function M.get_scope_range()
 	-- Basic checks for treesitter availability
 	local has_ts, ts_parsers = pcall(require, "nvim-treesitter.parsers")
-	if not has_ts or not ts_parsers.has_parser() then
+	if not has_ts then
+		log.info("Treesitter not available, using window range")
+		return M.get_window_range()
+	end
+	
+	-- Get the current buffer's filetype for parser check
+	local bufnr = state.current_position.bufnr or vim.api.nvim_get_current_buf()
+	local filetype = vim.api.nvim_buf_get_option(bufnr, 'filetype')
+	
+	if not filetype or filetype == '' or not ts_parsers.has_parser(filetype) then
 		log.info("Treesitter not available or no parser, using window range")
 		return M.get_window_range()
 	end
 
-	local bufnr = state.current_position.bufnr or vim.api.nvim_get_current_buf()
 
 	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
 		log.error("Invalid buffer for scope range")

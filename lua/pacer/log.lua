@@ -1,6 +1,5 @@
 local M = {}
 
--- Log levels
 M.levels = {
 	ERROR = 1,
 	WARN = 2,
@@ -26,20 +25,22 @@ local function get_level_num(level_str)
 	end
 end
 
--- Get current log level from config
 local function get_current_level()
 	local config = require("pacer.config")
 	if config.options and config.options.log_level then
 		return get_level_num(config.options.log_level)
 	end
-	return M.levels.INFO -- default to info level
+	-- Use the default from config.defaults if options not yet set
+	if config.defaults and config.defaults.log_level then
+		return get_level_num(config.defaults.log_level)
+	end
+	-- Final fallback
+	return M.levels.ERROR
 end
 
--- Core logging function
 local function log(level, message, should_notify)
 	local current_level = get_current_level()
 
-	-- Only log if the message level is <= current log level (higher priority)
 	if level > current_level then
 		return
 	end
@@ -47,23 +48,18 @@ local function log(level, message, should_notify)
 	local level_name = M.level_names[level] or "UNKNOWN"
 	local log_message = string.format("Pacer [%s]: %s", level_name, message)
 
-	-- Always write to messages
 	print(log_message)
 
-	-- Notify user if requested
 	if should_notify then
-		local hl_group = "Normal"
-		if level == M.levels.ERROR then
-			hl_group = "ErrorMsg"
-		elseif level == M.levels.WARN then
-			hl_group = "WarningMsg"
-		end
-
-		vim.api.nvim_echo({ { message, hl_group } }, false, {})
+		vim.notify(
+			message,
+			level == M.levels.ERROR and vim.log.levels.ERROR
+				or level == M.levels.WARN and vim.log.levels.WARN
+				or vim.log.levels.INFO
+		)
 	end
 end
 
--- Public logging functions
 function M.info(message, notify)
 	log(M.levels.INFO, message, notify)
 end
@@ -73,7 +69,7 @@ function M.warn(message, notify)
 end
 
 function M.error(message, notify)
-	log(M.levels.ERROR, message, notify == nil and true or notify) -- errors notify by default
+	log(M.levels.ERROR, message, notify == nil and true or notify)
 end
 
 return M

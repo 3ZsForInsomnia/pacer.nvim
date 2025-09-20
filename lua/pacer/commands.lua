@@ -33,6 +33,18 @@ function M.start_pacer(args)
 		log.warn("State validation failed during start, state has been reset")
 	end
 
+	-- Check if there's a paused session in the same buffer
+	local current_buf = vim.api.nvim_get_current_buf()
+	if state.paused and state.bufnr == current_buf and state.last_word_idx then
+		log.info("Resuming from paused session", true)
+		local ok, err = pcall(pacer.resume)
+		if not ok then
+			log.error("Failed to resume paused session: " .. tostring(err))
+			state.reset_to_safe_state()
+		end
+		return
+	end
+
 	local options = {}
 
 	if args.args and args.args ~= "" then
@@ -52,7 +64,6 @@ function M.start_pacer(args)
 	end
 
 	-- Validate current buffer before proceeding
-	local current_buf = vim.api.nvim_get_current_buf()
 	if not vim.api.nvim_buf_is_valid(current_buf) then
 		vim.api.nvim_echo({{"Cannot start: invalid buffer", "ErrorMsg"}}, false, {})
 		log.error("Cannot start pacer - current buffer is invalid")
@@ -69,6 +80,10 @@ function M.start_pacer(args)
 	if not state.save_position() then
 		log.warn("Warning - could not save starting position")
 	end
+
+	-- Clear any old paused state since we're starting fresh
+	state.paused = false
+	state.last_word_idx = nil
 
 	options.start_from_cursor = true
 
