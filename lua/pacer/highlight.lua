@@ -5,6 +5,8 @@ local c = v.cmd
 local M = {}
 local state = require("pacer.state")
 
+local log = require("pacer.log")
+
 M.ns_id = nil
 local HL_GROUP = "PacerHighlight"
 
@@ -21,7 +23,7 @@ local function setup_highlight(config)
 	config = config or state.config
 
 	if not config or not config.highlight then
-		print("Pacer: Invalid config for highlight setup, using defaults")
+		log.warn("Invalid config for highlight setup, using defaults")
 		config = { highlight = M.defaults and M.defaults.highlight or { bg = "#335577", fg = "#ffffff", style = "underline" } }
 	end
 
@@ -50,7 +52,7 @@ local function setup_highlight(config)
 
 	local ok, err = pcall(c, cmd)
 	if not ok then
-		print("Pacer: Failed to setup highlight: " .. tostring(err))
+		log.error("Failed to setup highlight: " .. tostring(err))
 		-- Try with basic highlight as fallback
 		pcall(c, "highlight " .. HL_GROUP .. " guibg=#335577 guifg=#ffffff gui=underline")
 	end
@@ -61,12 +63,12 @@ local ok, err = pcall(v.api.nvim_create_autocmd, "ColorScheme", {
 	callback = function()
 		local highlight_ok, highlight_err = pcall(setup_highlight)
 		if not highlight_ok then
-			print("Pacer: Failed to refresh highlight on colorscheme change: " .. tostring(highlight_err))
+			log.error("Failed to refresh highlight on colorscheme change: " .. tostring(highlight_err))
 		end
 	end,
 })
 if not ok then
-	print("Pacer: Failed to setup colorscheme autocmd: " .. tostring(err))
+	log.error("Failed to setup colorscheme autocmd: " .. tostring(err))
 end
 
 function M.create_namespace()
@@ -75,7 +77,7 @@ function M.create_namespace()
 		if ok then
 			M.ns_id = ns_id
 		else
-			print("Pacer: Failed to create namespace: " .. tostring(ns_id))
+			log.error("Failed to create namespace: " .. tostring(ns_id))
 			return nil
 		end
 	end
@@ -84,12 +86,12 @@ end
 
 function M.highlight_word(bufnr, ns, lnum, col, len)
 	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-		print("Pacer: Cannot highlight word - invalid buffer")
+		log.error("Cannot highlight word - invalid buffer")
 		return false
 	end
 	
 	if not ns or not lnum or not col or not len then
-		print("Pacer: Cannot highlight word - missing parameters")
+		log.error("Cannot highlight word - missing parameters")
 		return false
 	end
 	
@@ -99,24 +101,22 @@ function M.highlight_word(bufnr, ns, lnum, col, len)
 	})
 	
 	if not ok then
-		print("Pacer: Failed to set highlight extmark: " .. tostring(err))
+		log.error("Failed to set highlight extmark: " .. tostring(err))
 		return false
 	end
 	
 	return true
 end
 
--- Apply highlight when the module loads
 local ok, err = pcall(setup_highlight)
 if not ok then
-	print("Pacer: Failed to setup initial highlight: " .. tostring(err))
+	log.error("Failed to setup initial highlight: " .. tostring(err))
 end
 
--- Function to refresh highlight when config changes
 function M.refresh_highlight(config)
 	local ok, err = pcall(setup_highlight, config)
 	if not ok then
-		print("Pacer: Failed to refresh highlight: " .. tostring(err))
+		log.error("Failed to refresh highlight: " .. tostring(err))
 	end
 end
 

@@ -1,14 +1,16 @@
 local M = {}
 local uv = vim.loop
 
+local log = require("pacer.log")
+
 function M.start(fn, interval_ms)
 	if type(fn) ~= "function" then
-		print("Pacer: Timer start called with invalid function")
+		log.error("Timer start called with invalid function")
 		return nil
 	end
 	
 	if type(interval_ms) ~= "number" or interval_ms <= 0 then
-		print("Pacer: Timer start called with invalid interval: " .. tostring(interval_ms))
+		log.error("Timer start called with invalid interval: " .. tostring(interval_ms))
 		return nil
 	end
 	
@@ -17,7 +19,7 @@ function M.start(fn, interval_ms)
 
 	local ok, timer = pcall(uv.new_timer)
 	if not ok or not timer then
-		print("Pacer: Failed to create timer: " .. tostring(timer))
+		log.error("Failed to create timer: " .. tostring(timer))
 		return nil
 	end
 
@@ -28,14 +30,14 @@ function M.start(fn, interval_ms)
 		vim.schedule_wrap(function()
 			local fn_ok, fn_err = pcall(fn)
 			if not fn_ok then
-				print("Pacer: Timer callback error: " .. tostring(fn_err))
+				log.error("Timer callback error: " .. tostring(fn_err))
 			end
 			-- Timer is auto-closed since it's one-shot
 		end)
 	)
 	
 	if not start_ok then
-		print("Pacer: Failed to start timer: " .. tostring(err))
+		log.error("Failed to start timer: " .. tostring(err))
 		pcall(timer.close, timer)
 		return nil
 	end

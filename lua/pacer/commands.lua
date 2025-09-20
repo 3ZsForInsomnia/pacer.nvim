@@ -7,17 +7,18 @@ local M = {}
 local pacer = require("pacer.core")
 local state = require("pacer.state")
 
--- Safe buffer operation wrapper
+local log = require("pacer.log")
+
 local function safe_buf_operation(bufnr, operation_name, operation)
 	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-		print("Pacer: " .. operation_name .. " failed - invalid buffer (id=" .. tostring(bufnr) .. ")")
+		log.error(operation_name .. " failed - invalid buffer (id=" .. tostring(bufnr) .. ")")
 		return false, "Invalid buffer"
 	end
 	
 	local ok, result = pcall(operation, bufnr)
 	if not ok then
 		vim.api.nvim_echo({{"Pacer: " .. operation_name .. " failed", "ErrorMsg"}}, false, {})
-		print("Pacer: " .. operation_name .. " operation failed: " .. tostring(result))
+		log.error(operation_name .. " operation failed: " .. tostring(result))
 		return false, result
 	end
 	return true, result
@@ -29,7 +30,7 @@ function M.start_pacer(args)
 
 	-- Validate current state before starting
 	if not state.validate_state() then
-		print("Pacer: State validation failed during start, state has been reset")
+		log.warn("State validation failed during start, state has been reset")
 	end
 
 	local options = {}
@@ -41,7 +42,7 @@ function M.start_pacer(args)
 			-- Add bounds checking
 			if wpm < 60 or wpm > 2000 then
 				vim.api.nvim_echo({{"Invalid WPM: must be 60-2000", "ErrorMsg"}}, false, {})
- 			print("Pacer: Invalid WPM value " .. wpm .. " - must be between 60 and 2000")
+				log.error("Invalid WPM value " .. wpm .. " - must be between 60 and 2000")
 				return
 			end
 			options.wpm = wpm
@@ -54,7 +55,7 @@ function M.start_pacer(args)
 	local current_buf = vim.api.nvim_get_current_buf()
 	if not vim.api.nvim_buf_is_valid(current_buf) then
 		vim.api.nvim_echo({{"Cannot start: invalid buffer", "ErrorMsg"}}, false, {})
-		print("Pacer: Cannot start pacer - current buffer is invalid")
+		log.error("Cannot start pacer - current buffer is invalid")
 		return
 	end
 	
@@ -62,11 +63,11 @@ function M.start_pacer(args)
 	local line_count = vim.api.nvim_buf_line_count(current_buf)
 	if line_count == 0 or (line_count == 1 and vim.api.nvim_buf_get_lines(current_buf, 0, 1, false)[1] == "") then
 		vim.api.nvim_echo({{"Cannot start: buffer is empty", "WarningMsg"}}, false, {})
-		print("Pacer: Cannot start pacer - buffer is empty")
+		log.warn("Cannot start pacer - buffer is empty")
 		return
 	end
 	if not state.save_position() then
-		print("Pacer: Warning - could not save starting position")
+		log.warn("Warning - could not save starting position")
 	end
 
 	options.start_from_cursor = true
@@ -74,7 +75,7 @@ function M.start_pacer(args)
 	local ok, err = pcall(pacer.restart, options)
 	if not ok then
 		vim.api.nvim_echo({{"Start failed", "ErrorMsg"}}, false, {})
-		print("Pacer: Failed to start pacer: " .. tostring(err))
+		log.error("Failed to start pacer: " .. tostring(err))
 		state.reset_to_safe_state()
 	end
 end
@@ -85,7 +86,7 @@ function M.stop_pacer()
 
 	local ok, err = pcall(pacer.stop)
 	if not ok then
-		print("Pacer: Error during stop, forcing cleanup: " .. tostring(err))
+		log.error("Error during stop, forcing cleanup: " .. tostring(err))
 		state.reset_to_safe_state()
 	end
 
@@ -100,13 +101,13 @@ function M.resume_pacer()
 
 	-- Validate current state
 	if not state.validate_state() then
-		print("Pacer: State validation failed during resume, state has been reset")
+		log.warn("State validation failed during resume, state has been reset")
 	end
 
 	-- Check if we have a valid last position
 	if not state.last_position.bufnr then
 		vim.api.nvim_echo({{"No session to resume", "WarningMsg"}}, false, {})
-		print("Pacer: No previous session to resume from - use :PacerStart to begin reading")
+		log.warn("No previous session to resume from - use :PacerStart to begin reading")
 		return
 	end
 
@@ -114,7 +115,7 @@ function M.resume_pacer()
 	local valid_buf = a.nvim_buf_is_valid(state.last_position.bufnr)
 	if not valid_buf then
 		vim.api.nvim_echo({{"Previous buffer no longer exists", "WarningMsg"}}, false, {})
-		print("Pacer: Previous buffer (id=" .. state.last_position.bufnr .. ") no longer exists")
+		log.warn("Previous buffer (id=" .. state.last_position.bufnr .. ") no longer exists")
 		state.clear_position()
 		return
 	end
@@ -127,7 +128,7 @@ function M.resume_pacer()
 	
 	if not ok then
 		vim.api.nvim_echo({{"Resume failed", "ErrorMsg"}}, false, {})
-		print("Pacer: Failed to restore position: " .. tostring(err))
+		log.error("Failed to restore position: " .. tostring(err))
 		return
 	end
 
@@ -135,7 +136,7 @@ function M.resume_pacer()
 	ok, err = pcall(pacer.resume)
 	if not ok then
 		vim.api.nvim_echo({{"Resume failed", "ErrorMsg"}}, false, {})
-		print("Pacer: Failed to resume pacer: " .. tostring(err))
+		log.error("Failed to resume pacer: " .. tostring(err))
 		state.reset_to_safe_state()
 	end
 end
@@ -146,7 +147,7 @@ function M.pause_pacer()
 
 	local ok, err = pcall(pacer.pause)
 	if not ok then
-		print("Pacer: Error during pause, forcing cleanup: " .. tostring(err))
+		log.error("Error during pause, forcing cleanup: " .. tostring(err))
 		state.reset_to_safe_state()
 	end
 end
@@ -156,7 +157,7 @@ function M.validate_pacer()
 	require("pacer.config").ensure_setup()
 	
 	vim.api.nvim_echo({{"=== Pacer Validation ===", "Title"}}, false, {})
-	print("Pacer: Running validation check...")
+	log.info("Running validation check...")
 	
 	local config = require("pacer.config")
 	local state = require("pacer.state")
@@ -165,18 +166,18 @@ function M.validate_pacer()
 	local env_ok = config.validate_environment()
 	
 	-- Validate configuration
-	print("Pacer: Current configuration:")
-	print("  WPM: " .. config.options.wpm)
-	print("  Highlight: " .. vim.inspect(config.options.highlight))
-	print("  Move cursor: " .. tostring(config.options.move_cursor))
-	print("  Focus enabled: " .. tostring(config.options.focus.enabled))
+	log.info("Current configuration:")
+	log.info("  WPM: " .. config.options.wpm)
+	log.info("  Highlight: " .. vim.inspect(config.options.highlight))
+	log.info("  Move cursor: " .. tostring(config.options.move_cursor))
+	log.info("  Focus enabled: " .. tostring(config.options.focus.enabled))
 	
 	-- Validate state
 	local state_ok = state.validate_state()
 	if state.active then
-		print("Pacer: Currently active with " .. (#state.words or 0) .. " words")
+		log.info("Currently active with " .. (#state.words or 0) .. " words")
 	else
-		print("Pacer: Not currently active")
+		log.info("Not currently active")
 	end
 	
 	-- Test basic functionality
@@ -184,7 +185,7 @@ function M.validate_pacer()
 	if vim.api.nvim_buf_is_valid(current_buf) then
 		local line_count = vim.api.nvim_buf_line_count(current_buf)
 		if line_count > 0 then
-			print("Pacer: Current buffer has " .. line_count .. " lines")
+			log.info("Current buffer has " .. line_count .. " lines")
 			
 			-- Test word extraction
 			local words = {}
@@ -195,32 +196,32 @@ function M.validate_pacer()
 			end)
 			
 			if ok then
-				print("Pacer: Core functionality test passed")
+				log.info("Core functionality test passed")
 			else
-				print("Pacer: Core functionality test failed: " .. tostring(err))
+				log.error("Core functionality test failed: " .. tostring(err))
 			end
 		else
-			print("Pacer: Current buffer is empty")
+			log.info("Current buffer is empty")
 		end
 	else
-		print("Pacer: Current buffer is invalid")
+		log.error("Current buffer is invalid")
 	end
 	
 	-- Check optional dependencies
 	local has_ts, ts_parsers = pcall(require, "nvim-treesitter.parsers")
 	if has_ts then
-		print("Pacer: nvim-treesitter available (enhanced focus mode)")
+		log.info("nvim-treesitter available (enhanced focus mode)")
 	else
-		print("Pacer: nvim-treesitter not available (basic focus mode)")
+		log.info("nvim-treesitter not available (basic focus mode)")
 	end
 	
 	local all_ok = env_ok and state_ok
 	if all_ok then
 		vim.api.nvim_echo({{"Pacer validation passed!", "MoreMsg"}}, false, {})
-		print("Pacer: All validation checks passed. Try :PacerStart to begin reading.")
+		log.info("All validation checks passed. Try :PacerStart to begin reading.")
 	else
 		vim.api.nvim_echo({{"Pacer validation found issues", "WarningMsg"}}, false, {})
-		print("Pacer: Some validation checks failed. Check messages above.")
+		log.warn("Some validation checks failed. Check messages above.")
 	end
 end
 

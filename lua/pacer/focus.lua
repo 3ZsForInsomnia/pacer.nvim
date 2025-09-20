@@ -1,6 +1,8 @@
 local M = {}
 local state = require("pacer.state")
 
+local log = require("pacer.log")
+
 local function setup_namespace()
 	if not M.ns_id then
 		M.ns_id = vim.api.nvim_create_namespace("PacerFocus")
@@ -26,12 +28,14 @@ end
 
 -- Check if current buffer is text-based
 function M.is_text_file()
-	local ok, ft = pcall(function() return vim.bo.filetype end)
+	local ok, ft = pcall(function()
+		return vim.bo.filetype
+	end)
 	if not ok then
-		print("Pacer: Could not determine filetype, assuming non-text")
+		log.warn("Could not determine filetype, assuming non-text")
 		return false
 	end
-	
+
 	local text_filetypes = {
 		"text",
 		"markdown",
@@ -43,7 +47,7 @@ function M.is_text_file()
 		"html",
 		"mail",
 	}
-	
+
 	for _, text_ft in ipairs(text_filetypes) do
 		if ft == text_ft then
 			return true
@@ -55,17 +59,17 @@ end
 -- Find paragraph boundaries for text files
 function M.get_paragraph_range()
 	local bufnr = state.current_position.bufnr or vim.api.nvim_get_current_buf()
-	
+
 	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-		print("Pacer: Invalid buffer for paragraph range")
+		log.error("Invalid buffer for paragraph range")
 		return M.get_window_range()
 	end
-	
+
 	local cursor_row = state.current_position.line or (vim.api.nvim_win_get_cursor(0)[1] - 1)
-	
+
 	local ok, lines = pcall(vim.api.nvim_buf_get_lines, bufnr, 0, -1, false)
 	if not ok then
-		print("Pacer: Failed to get buffer lines for paragraph range: " .. tostring(lines))
+		log.error("Failed to get buffer lines for paragraph range: " .. tostring(lines))
 		return M.get_window_range()
 	end
 
@@ -86,24 +90,24 @@ end
 
 function M.get_window_range()
 	local cursor_row = state.current_position.line
-	
+
 	if not cursor_row then
 		local ok, cursor = pcall(vim.api.nvim_win_get_cursor, 0)
 		if ok then
 			cursor_row = cursor[1] - 1
 		else
-			print("Pacer: Could not get cursor position for window range, using 0")
+			log.warn("Could not get cursor position for window range, using 0")
 			cursor_row = 0
 		end
 	end
-	
+
 	local MIN_VISIBLE_LINES = 5
 
 	local bufnr = state.current_position.bufnr or vim.api.nvim_get_current_buf()
-	
+
 	local ok, line_count = pcall(vim.api.nvim_buf_line_count, bufnr)
 	if not ok then
-		print("Pacer: Failed to get line count for window range: " .. tostring(line_count))
+		log.error("Failed to get line count for window range: " .. tostring(line_count))
 		line_count = cursor_row + MIN_VISIBLE_LINES + 1
 	end
 
@@ -119,28 +123,28 @@ function M.get_scope_range()
 	-- Basic checks for treesitter availability
 	local has_ts, ts_parsers = pcall(require, "nvim-treesitter.parsers")
 	if not has_ts or not ts_parsers.has_parser() then
-		print("Pacer: Treesitter not available or no parser, using window range")
+		log.info("Treesitter not available or no parser, using window range")
 		return M.get_window_range()
 	end
 
 	local bufnr = state.current_position.bufnr or vim.api.nvim_get_current_buf()
-	
+
 	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-		print("Pacer: Invalid buffer for scope range")
+		log.error("Invalid buffer for scope range")
 		return M.get_window_range()
 	end
 
 	-- Get cursor position
 	local cursor_row = state.current_position.line
 	local cursor_col = state.current_position.col
-	
+
 	if not cursor_row or not cursor_col then
 		local ok, cursor = pcall(vim.api.nvim_win_get_cursor, 0)
 		if ok then
 			cursor_row = cursor_row or (cursor[1] - 1)
 			cursor_col = cursor_col or cursor[2]
 		else
-			print("Pacer: Could not get cursor position for scope range")
+			log.warn("Could not get cursor position for scope range")
 			return M.get_window_range()
 		end
 	end
@@ -151,23 +155,23 @@ function M.get_scope_range()
 	-- Get tree
 	local ok, parser = pcall(vim.treesitter.get_parser, bufnr)
 	if not ok then
-		print("Pacer: Failed to get treesitter parser: " .. tostring(parser))
+		log.error("Failed to get treesitter parser: " .. tostring(parser))
 		return M.get_window_range()
 	end
-	
+
 	local ok, trees = pcall(parser.parse, parser)
 	if not ok or not trees or #trees == 0 then
-		print("Pacer: Failed to parse tree: " .. tostring(trees))
+		log.error("Failed to parse tree: " .. tostring(trees))
 		return M.get_window_range()
 	end
-	
+
 	local tree = trees[1]
 	local root = tree:root()
 
 	-- Find the node at cursor position
 	local current_node = root:named_descendant_for_range(cursor_row, cursor_col, cursor_row, cursor_col)
 	if not current_node then
-		print("Pacer: No treesitter node at cursor position")
+		log.info("No treesitter node at cursor position")
 		return M.get_window_range()
 	end
 
@@ -200,7 +204,7 @@ function M.get_scope_range()
 
 	-- If no scopes found, fallback to window
 	if #scopes == 0 then
-		print("Pacer: No relevant scopes found in treesitter")
+		log.info("No relevant scopes found in treesitter")
 		return M.get_window_range()
 	end
 
@@ -218,7 +222,7 @@ function M.get_scope_range()
 	start_row = math.max(0, start_row - MIN_CONTEXT_LINES)
 	local ok, line_count = pcall(vim.api.nvim_buf_line_count, bufnr)
 	if not ok then
-		print("Pacer: Failed to get line count for scope range")
+		log.error("Failed to get line count for scope range")
 		line_count = end_row + MIN_CONTEXT_LINES + 1
 	end
 	end_row = math.min(line_count - 1, end_row + MIN_CONTEXT_LINES)
@@ -238,17 +242,17 @@ function M.apply_focus(config)
 	end
 
 	local dim_color = config.focus.dim_color or "#777777"
-	
+
 	local ok, err = pcall(vim.cmd, string.format("highlight PacerDimText guifg=%s", dim_color))
 	if not ok then
-		print("Pacer: Failed to set dim text highlight: " .. tostring(err))
+		log.error("Failed to set dim text highlight: " .. tostring(err))
 		return
 	end
 
 	local bufnr = state.current_position and state.current_position.bufnr or vim.api.nvim_get_current_buf()
-	
+
 	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-		print("Pacer: Cannot apply focus - invalid buffer")
+		log.error("Cannot apply focus - invalid buffer")
 		return
 	end
 
@@ -264,22 +268,22 @@ function M.apply_focus(config)
 			focus_range = M.get_scope_range()
 		end
 	end)
-	
+
 	if not ok then
-		print("Pacer: Error determining focus range: " .. tostring(err))
+		log.error("Error determining focus range: " .. tostring(err))
 		focus_range = M.get_window_range() -- Fallback to window range
 	end
 
 	-- If we couldn't determine a range, do nothing
 	if not focus_range then
-		print("Pacer: Could not determine focus range, skipping focus")
+		log.warn("Could not determine focus range, skipping focus")
 		return
 	end
 
 	-- Get total lines in buffer
 	local ok, total_lines = pcall(vim.api.nvim_buf_line_count, bufnr)
 	if not ok then
-		print("Pacer: Failed to get buffer line count: " .. tostring(total_lines))
+		log.error("Failed to get buffer line count: " .. tostring(total_lines))
 		return
 	end
 
@@ -296,12 +300,15 @@ function M.apply_focus(config)
 end
 
 function M.setup()
-	local ok, err = pcall(vim.cmd, [[
+	local ok, err = pcall(
+		vim.cmd,
+		[[
 		highlight default PacerDimText guifg=#777777 guibg=NONE gui=italic
-	]])
-	
+	]]
+	)
+
 	if not ok then
-		print("Pacer: Failed to setup default dim text highlight: " .. tostring(err))
+		log.error("Failed to setup default dim text highlight: " .. tostring(err))
 	end
 end
 

@@ -4,13 +4,13 @@ local Timer = require("pacer.timer")
 local H = require("pacer.highlight")
 local state = require("pacer.state")
 local progress = require("pacer.progress")
+local log = require("pacer.log")
 local M = {}
 
--- Safe operation wrapper for buffer operations
 local function safe_operation(operation_name, operation)
 	local ok, result = pcall(operation)
 	if not ok then
-		print("Pacer: " .. operation_name .. " failed: " .. tostring(result))
+		log.error(operation_name .. " failed: " .. tostring(result))
 		-- Don't reset state here, let caller decide
 		return false, result
 	end
@@ -54,7 +54,7 @@ end
 
 local function get_words(bufnr)
 	if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-		print("Pacer: get_words called with invalid buffer")
+		log.error("get_words called with invalid buffer")
 		return {}
 	end
 
@@ -64,12 +64,12 @@ local function get_words(bufnr)
 	end)
 
 	if not ok or not lines then
-		print("Pacer: Failed to get buffer lines")
+		log.error("Failed to get buffer lines")
 		return {}
 	end
 
 	if #lines == 0 then
-		print("Pacer: Buffer is empty")
+		log.warn("Buffer is empty")
 		return {}
 	end
 
@@ -95,7 +95,7 @@ local function get_words(bufnr)
 		end
 	end
 
-	print("Pacer: Extracted " .. #words .. " words from buffer")
+	log.info("Extracted " .. #words .. " words from buffer")
 	return words
 end
 
@@ -237,7 +237,7 @@ function M.add_keymap()
 		safe_operation("set pause keymap", function()
 			v.keymap.set("n", state.config.pause_key, function()
 				v.api.nvim_echo({ { "Pacer paused", "Normal" } }, false, {})
-				print("Pacer: Paused by user")
+				log.info("Paused by user", true)
 				M.pause()
 				M.remove_keymap()
 			end, { noremap = true, silent = true, desc = "Pause pacer" })
@@ -291,9 +291,8 @@ local function clear()
 	end
 end
 
--- Stop the pacer
 function M.stop()
-	print("Pacer: Stopping pacer and cleaning up resources")
+	log.info("Stopping pacer and cleaning up resources")
 
 	if state.timer then
 		Timer.stop(state.timer)
@@ -325,7 +324,7 @@ function M.step()
 
 	if state.cur_word > #state.words then
 		-- End of file handling
-		print("Pacer: Reached end of text, stopping")
+		log.info("Reached end of text, stopping", true)
 		clear()
 		if state.timer then
 			Timer.stop(state.timer)
@@ -346,7 +345,7 @@ function M.step()
 		end)
 
 		if not ok then
-			print("Pacer: Failed to highlight word, attempting to continue")
+			log.warn("Failed to highlight word, attempting to continue")
 		end
 
 		state.current_position = {
@@ -400,7 +399,7 @@ end
 function M.restart(options)
 	options = options or {}
 
-	print("Pacer: Restarting with options: " .. vim.inspect(options))
+	log.info("Restarting with options: " .. vim.inspect(options))
 
 	if options.preset then
 		local config_module = require("pacer.config")
@@ -412,7 +411,7 @@ function M.restart(options)
 
 	local current_buf = v.api.nvim_get_current_buf()
 	if not vim.api.nvim_buf_is_valid(current_buf) then
-		print("Pacer: Cannot restart - current buffer is invalid")
+		log.error("Cannot restart - current buffer is invalid")
 		state.reset_to_safe_state()
 		return
 	end
@@ -424,7 +423,7 @@ function M.restart(options)
 	end)
 
 	if not ok then
-		print("Pacer: Failed to create namespace")
+		log.error("Failed to create namespace")
 		state.reset_to_safe_state()
 		return
 	end
@@ -434,7 +433,7 @@ function M.restart(options)
 
 	if #state.words == 0 then
 		v.api.nvim_echo({ { "No words found to read", "WarningMsg" } }, false, {})
-		print("Pacer: No words found in buffer, cannot start")
+		log.warn("No words found in buffer, cannot start")
 		state.reset_to_safe_state()
 		return
 	end
@@ -446,7 +445,7 @@ function M.restart(options)
 		end)
 
 		if not ok then
-			print("Pacer: Could not get cursor position, starting from beginning")
+			log.warn("Could not get cursor position, starting from beginning")
 		else
 			local cursor_line = cursor[1] - 1
 			local cursor_col = cursor[2]
@@ -486,11 +485,11 @@ function M.restart(options)
 	end, ms_per_word)
 
 	M.add_keymap()
-	print("Pacer: Started successfully - " .. #state.words .. " words, starting from word " .. state.cur_word)
+	log.info("Started successfully - " .. #state.words .. " words, starting from word " .. state.cur_word, true)
 end
 
 function M.pause()
-	print("Pacer: Pausing pacer")
+	log.info("Pausing pacer", true)
 
 	if state.timer then
 		Timer.stop(state.timer)
@@ -511,7 +510,7 @@ function M.pause()
 end
 
 function M.resume()
-	print("Pacer: Resuming pacer")
+	log.info("Resuming pacer", true)
 
 	if state.paused and state.last_word_idx then
 		M.restart({ from_word = state.last_word_idx })

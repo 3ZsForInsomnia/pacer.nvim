@@ -1,6 +1,8 @@
 local v = vim
 local state = require("pacer.state")
 
+local log = require("pacer.log")
+
 local M = {}
 
 local last_notification_time = 0
@@ -72,17 +74,18 @@ function M.update_progress()
 				percent_done, time_text, current_pos, total_words, state.config.wpm)
 			
 			v.api.nvim_echo({{short_message, "Normal"}}, false, {})
-			print(long_message)
+			log.info(string.format("%d%% complete (%s remaining) - word %d of %d at %d WPM", 
+				percent_done, time_text, current_pos, total_words, state.config.wpm))
 	end
 	end)
 	
 	if not ok then
-		print("Pacer: Error updating progress: " .. tostring(err))
+		log.error("Error updating progress: " .. tostring(err))
 	end
 end
 
 function M.clear_progress()
-	print("Pacer: Clearing progress tracking")
+	log.info("Clearing progress tracking")
 	last_notification_time = 0
 	last_milestone_percent = -1
 end
