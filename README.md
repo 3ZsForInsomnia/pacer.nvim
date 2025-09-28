@@ -25,7 +25,7 @@ Setup (for lazy.nvim):
 
 ```lua
 return {
-  "your-username/pacer.nvim",
+  "3ZsForInsomnia/pacer.nvim",
   cmd = { "PacerStart", "PacerResume", "PacerValidate" },
   -- Plugin will be automatically loaded when any of the above commands are used
   -- You can also add keys or events for other loading triggers:
