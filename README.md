@@ -1,4 +1,7 @@
 # pacer.nvim
+
+<img width="1062" height="565" alt="Screenshot 2025-09-29 at 9 39 53 AM" src="https://github.com/user-attachments/assets/108a0883-3ae9-4618-9e48-c7debb31c10f" />
+
 ## Intro
 
 A reading pacer for Neovim to help you read faster!
