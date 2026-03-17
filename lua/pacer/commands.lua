@@ -205,13 +205,6 @@ function M.validate_pacer()
 		log.error("Current buffer is invalid")
 	end
 
-	-- Check optional dependencies
-	local has_ts, ts_parsers = pcall(require, "nvim-treesitter.parsers")
-	if has_ts then
-		log.info("nvim-treesitter available (enhanced focus mode)")
-	else
-		log.info("nvim-treesitter not available (basic focus mode)")
-	end
 
 	local all_ok = env_ok and state_ok
 	if all_ok then

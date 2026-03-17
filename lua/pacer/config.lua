@@ -113,10 +113,6 @@ function M.validate_environment()
 		table.insert(issues, "Timer support not available")
 	end
 
-	if vim.fn.has("lua") == 0 then
-		table.insert(issues, "Lua support not available")
-	end
-
 	-- Check if we have a valid buffer
 	local current_buf = vim.api.nvim_get_current_buf()
 	if not vim.api.nvim_buf_is_valid(current_buf) then
